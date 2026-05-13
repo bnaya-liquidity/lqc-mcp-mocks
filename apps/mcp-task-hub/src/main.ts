@@ -12,8 +12,6 @@ async function bootstrap() {
     logger: new StderrLogger(['log', 'warn', 'error']),
   });
 
-  await app.init();
-
   const mcpService = app.get(McpService);
   const transport = await mcpService.start();
 
@@ -30,7 +28,8 @@ async function bootstrap() {
   });
 
   const shutdown = async () => {
-    httpServer.close();
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    await transport.close();
     await app.close();
     process.exit(0);
   };
