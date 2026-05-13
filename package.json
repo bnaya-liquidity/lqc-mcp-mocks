@@ -1,0 +1,12 @@
+{
+  "name": "lqc-mcp-mocks",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "start:dev": "concurrently -n task-hub,crm-rest,crm-mcp -c blue,green,yellow \"pnpm --filter mcp-task-hub run start:dev\" \"pnpm --filter api-crm run start:dev\" \"pnpm --filter api-crm run start:mcp-dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
