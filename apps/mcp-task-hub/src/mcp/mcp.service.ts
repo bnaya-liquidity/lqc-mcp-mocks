@@ -16,9 +16,8 @@ import { TasksService } from '../tasks/tasks.service.js';
  *   2. Registers all tools, resources, and prompts in `onModuleInit` — called
  *      automatically by NestJS after all providers are instantiated, so
  *      `TasksService` is guaranteed to be ready.
- *   3. Exposes `start()`, which connects the stdio transport and hands control
- *      to the MCP event loop. This is called from `main.ts` after the whole
- *      NestJS application context is initialised.
+ *   3. Exposes `start()`, which connects an HTTP transport and returns it so
+ *      `main.ts` can mount it on a `node:http` server.
  *
  * Tool handlers call `this.tasks.*` methods directly — there is no HTTP hop.
  */
@@ -504,16 +503,12 @@ export class McpService implements OnModuleInit {
   // ─── Transport ────────────────────────────────────────────────────────────
 
   /**
-   * Connects the MCP server to the stdio transport and enters the event loop.
-   *
-   * Must be called after `app.init()` completes so that all `onModuleInit`
-   * registrations (tools, resources, prompts) are already applied to the
-   * server before the first client message arrives.
-   *
-   * This call does not return — it suspends in the Node event loop processing
-   * incoming JSON-RPC frames from stdin until the process is signalled.
+   * Connects the MCP server to a stateless HTTP transport and returns it.
+   * The caller mounts the transport on a `node:http` server to handle
+   * incoming JSON-RPC requests at the `/mcp` endpoint.
    */
   async start(): Promise<StreamableHTTPServerTransport> {
+    // sessionIdGenerator: undefined → stateless (no per-session state, safe for horizontal scaling)
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await this.server.connect(transport);
     this.logger.log('MCP server connected via HTTP transport');
