@@ -17,7 +17,10 @@ async function bootstrap() {
 
   const httpServer = http.createServer(async (req, res) => {
     if (req.url === '/mcp') {
-      await transport.handleRequest(req, res);
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+      await transport.handleRequest(req, res, body);
     } else {
       res.writeHead(404).end('Not found');
     }
