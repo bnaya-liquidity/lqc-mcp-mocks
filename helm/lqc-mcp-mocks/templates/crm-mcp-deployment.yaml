@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-crm-mcp
+  labels:
+    app: crm-mcp
+    {{- include "lqc-mcp-mocks.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.crmMcp.replicas }}
+  selector:
+    matchLabels:
+      app: crm-mcp
+  template:
+    metadata:
+      labels:
+        app: crm-mcp
+    spec:
+      containers:
+        - name: crm-mcp
+          image: {{ .Values.image.apiCrm }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{- toYaml .Values.crmMcp.command | nindent 12 }}
+          ports:
+            - containerPort: {{ .Values.crmMcp.port }}
+          resources: {{- toYaml .Values.crmMcp.resources | nindent 12 }}

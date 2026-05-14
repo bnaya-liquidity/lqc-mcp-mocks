@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-crm-mcp-svc
+  labels:
+    app: crm-mcp
+    {{- include "lqc-mcp-mocks.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: crm-mcp
+  ports:
+    - port: {{ .Values.crmMcp.port }}
+      targetPort: {{ .Values.crmMcp.port }}
+      protocol: TCP
