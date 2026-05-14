@@ -1,7 +1,10 @@
-# --- Stage 1: install all workspace dependencies ---
-FROM node:22-alpine AS deps
+# --- Stage 0: shared base ---
+FROM node:22-alpine AS base
 RUN corepack enable
 WORKDIR /app
+
+# --- Stage 1: install all workspace dependencies ---
+FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/mcp-task-hub/package.json ./apps/mcp-task-hub/
 RUN pnpm install --frozen-lockfile
@@ -14,9 +17,7 @@ COPY apps/mcp-task-hub/src ./apps/mcp-task-hub/src
 RUN pnpm --filter mcp-task-hub run build
 
 # --- Stage 3: slim production runtime ---
-FROM node:22-alpine AS runtime
-RUN corepack enable
-WORKDIR /app
+FROM base AS final
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/mcp-task-hub/package.json ./apps/mcp-task-hub/
 RUN pnpm install --frozen-lockfile --prod
