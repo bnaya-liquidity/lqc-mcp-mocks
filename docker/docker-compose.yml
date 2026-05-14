@@ -1,0 +1,21 @@
+services:
+  task-hub:
+    build:
+      context: ..
+      dockerfile: docker/task-hub.Dockerfile
+    ports:
+      - "3010:3010"
+
+  crm-rest:
+    build:
+      context: ..
+      dockerfile: docker/crm-rest.Dockerfile
+    ports:
+      - "3011:3011"
+
+  crm-mcp:
+    build:
+      context: ..
+      dockerfile: docker/crm-mcp.Dockerfile
+    ports:
+      - "3012:3012"
