@@ -156,6 +156,28 @@ The MCP facade wraps the same `CustomersService`, `DealsService`, and `Activitie
 
 ---
 
+## Docker
+
+Requires Docker with the Compose plugin. No local Node.js or pnpm needed — TypeScript is compiled inside the build.
+
+```bash
+# Build images and start all three servers
+docker compose -f docker/docker-compose.yml up --build -d
+
+# Check all three are running
+docker compose -f docker/docker-compose.yml ps
+
+# Tail logs
+docker compose -f docker/docker-compose.yml logs -f
+
+# Stop and remove containers
+docker compose -f docker/docker-compose.yml down
+```
+
+The same ports are mapped to the host (3010 / 3011 / 3012), so the `claude mcp add` commands below work unchanged. In-memory data resets on each container restart.
+
+---
+
 ## Connecting to Claude Code
 
 Servers must be running before Claude Code can connect. Start them:
