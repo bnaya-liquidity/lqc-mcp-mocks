@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-task-hub
+  labels:
+    app: task-hub
+    {{- include "lqc-mcp-mocks.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.taskHub.replicas }}
+  selector:
+    matchLabels:
+      app: task-hub
+  template:
+    metadata:
+      labels:
+        app: task-hub
+    spec:
+      containers:
+        - name: task-hub
+          image: {{ .Values.image.taskHub }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.taskHub.port }}
+          resources: {{- toYaml .Values.taskHub.resources | nindent 12 }}

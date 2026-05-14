@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-task-hub-svc
+  labels:
+    app: task-hub
+    {{- include "lqc-mcp-mocks.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: task-hub
+  ports:
+    - port: {{ .Values.taskHub.port }}
+      targetPort: {{ .Values.taskHub.port }}
+      protocol: TCP
