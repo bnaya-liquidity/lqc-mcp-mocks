@@ -174,7 +174,14 @@ docker compose -f docker/docker-compose.yml logs -f
 docker compose -f docker/docker-compose.yml down
 ```
 
-The same ports are mapped to the host (3010 / 3011 / 3012), so the `claude mcp add` commands below work unchanged. In-memory data resets on each container restart.
+The same ports are mapped to the host (3010 / 3011 / 3012). Register with Claude Code once the containers are up (run once):
+
+```bash
+claude mcp add --transport http --scope user lqc-mock-task-hub http://localhost:3010/mcp
+claude mcp add --transport http --scope user lqc-mock-crm http://localhost:3012/mcp
+```
+
+In-memory data resets on each container restart.
 
 ---
 
