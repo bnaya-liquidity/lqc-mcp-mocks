@@ -214,3 +214,39 @@ claude mcp list
 **Mock data** is seeded in each service constructor. Restart the process to reset to the original state.
 
 **Deployment** — see `spec/deploy.prd.md` for the phased strategy: local dev → Docker Compose → Kubernetes/Helm.
+
+---
+
+## Phase 3 — Kubernetes via Helm
+
+### Install
+
+```bash
+helm install lqc-mcp-mocks ./helm/lqc-mcp-mocks
+```
+
+### Connect Claude Code (via port-forward)
+
+```bash
+kubectl port-forward svc/lqc-mcp-mocks-task-hub-svc 3010:3010 &
+kubectl port-forward svc/lqc-mcp-mocks-crm-mcp-svc 3012:3012 &
+# claude mcp add commands are unchanged — still localhost:PORT
+```
+
+### In-cluster access
+
+Other pods reach the MCP servers at:
+- `http://lqc-mcp-mocks-task-hub-svc:3010/mcp`
+- `http://lqc-mcp-mocks-crm-mcp-svc:3012/mcp`
+
+### Common overrides
+
+```bash
+# scale crm-mcp to 3 replicas (stateless, safe to scale)
+helm upgrade lqc-mcp-mocks ./helm/lqc-mcp-mocks --set crmMcp.replicas=3
+
+# pin image tags for a release
+helm upgrade lqc-mcp-mocks ./helm/lqc-mcp-mocks \
+  --set image.taskHub=ghcr.io/liquidity/lqc-mock-task-hub:v1.2.0 \
+  --set image.apiCrm=ghcr.io/liquidity/lqc-mock-api-crm:v1.2.0
+```
