@@ -13,16 +13,48 @@ async function bootstrap() {
   });
 
   const mcpService = app.get(CrmMcpService);
-  const transport = await mcpService.start();
 
+  // MCP SDK ≥ 1.13 stateless transports cannot be reused across requests.
+  // Create a fresh McpServer + transport per POST, then tear them down when
+  // the response stream closes.
   const httpServer = http.createServer(async (req, res) => {
-    if (req.url === '/mcp') {
+    if (req.url !== '/mcp') {
+      res.writeHead(404).end('Not found');
+      return;
+    }
+
+    if (req.method === 'GET') {
+      res.writeHead(405, { 'Content-Type': 'application/json' }).end(
+        JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null }),
+      );
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.writeHead(405).end('Method Not Allowed');
+      return;
+    }
+
+    try {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+
+      const { server, transport } = await mcpService.createTransport();
+
+      res.on('close', () => {
+        transport.close().catch(() => undefined);
+        server.close().catch(() => undefined);
+      });
+
       await transport.handleRequest(req, res, body);
-    } else {
-      res.writeHead(404).end('Not found');
+    } catch (err) {
+      process.stderr.write(`MCP request error: ${err}\n`);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' }).end(
+          JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null }),
+        );
+      }
     }
   });
 
@@ -32,7 +64,6 @@ async function bootstrap() {
 
   const shutdown = async () => {
     await new Promise<void>(resolve => httpServer.close(() => resolve()));
-    await transport.close();
     await app.close();
     process.exit(0);
   };

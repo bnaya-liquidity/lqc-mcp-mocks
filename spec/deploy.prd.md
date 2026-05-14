@@ -15,11 +15,16 @@ The strategy moves in three phases. Each phase is independently shippable — co
 **How it works:**
 
 ```
-┌──────────────┐    HTTP    ┌─────────────────────────────────┐
+┌──────────────┐  MCP/HTTP  ┌─────────────────────────────────┐
 │  Claude Code │ ─────────▶ │  localhost:3010  (task-hub MCP) │
-│              │ ─────────▶ │  localhost:3011  (crm REST)     │
 │              │ ─────────▶ │  localhost:3012  (crm MCP)      │
-└──────────────┘            └─────────────────────────────────┘
+└──────────────┘            └────────────────┬────────────────┘
+                                             │ direct service calls (in-process)
+                             ┌───────────────▼─────────────────┐
+                             │  localhost:3011  (crm REST)      │
+                             │  — developer tool only,          │
+                             │    not registered with Claude    │
+                             └─────────────────────────────────┘
 ```
 
 **Start:**

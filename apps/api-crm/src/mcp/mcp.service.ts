@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -9,53 +9,55 @@ import { ActivitiesService } from '../activities/activities.service.js';
 /**
  * MCP facade over the CRM REST API.
  *
- * This class is the central integration point of the `api-crm` app. It bridges
- * three NestJS services — `CustomersService`, `DealsService`, and
- * `ActivitiesService` — to the MCP protocol by registering tools, resources,
- * and prompts on an `McpServer` instance.
+ * Uses the stateless per-request pattern required by MCP SDK ≥ 1.13:
+ * `StreamableHTTPServerTransport` with `sessionIdGenerator: undefined` cannot
+ * be reused across requests, so `createTransport()` builds a fresh
+ * McpServer + transport per POST and returns both for `main-mcp.ts` to use.
  *
- * The key architectural principle here is the **facade pattern**: the MCP
- * tools do not make HTTP requests to the REST API. They call the same service
- * methods directly via NestJS dependency injection. This means there is a
- * single implementation of every business operation and two ways to access it:
- *   - REST: `GET /api/customers/search?q=…`
- *   - MCP:  `search_customers({ query: "…" })`
+ * The three NestJS service singletons are shared across all per-request
+ * servers — only the MCP protocol layer is recreated per request.
  *
- * Lifecycle:
- *   1. Constructor creates and configures `McpServer` (before DI is resolved).
- *   2. `onModuleInit` registers all tools, resources, and prompts (after DI).
- *   3. `main-mcp.ts` calls `start()` to connect an HTTP transport and returns it so `main-mcp.ts` can mount it on a `node:http` server.
+ * The key architectural principle is the **facade pattern**: MCP tools call
+ * the same service methods as the REST API — no HTTP hop, single implementation.
  */
 @Injectable()
-export class CrmMcpService implements OnModuleInit {
+export class CrmMcpService {
   private readonly logger = new Logger(CrmMcpService.name);
-  private readonly server: McpServer;
 
   constructor(
     private readonly customers: CustomersService,
     private readonly deals: DealsService,
     private readonly activities: ActivitiesService,
-  ) {
-    this.server = new McpServer(
+  ) {}
+
+  // ─── Transport ────────────────────────────────────────────────────────────
+
+  /**
+   * Creates a fresh McpServer + transport for a single stateless HTTP request.
+   * Call `transport.handleRequest(req, res, body)` after this, then close both
+   * on `res.on('close')`.
+   */
+  async createTransport(): Promise<{ server: McpServer; transport: StreamableHTTPServerTransport }> {
+    const server = new McpServer(
       { name: 'crm-facade', version: '1.0.0' },
       {
         // `instructions` is injected verbatim into Claude's system prompt.
-        // These hints tell Claude the correct order to call tools — without them
-        // Claude might try to call get_customer before knowing the customer ID.
+        // These hints tell Claude the correct order to call tools.
         instructions:
           'Use search_customers to find customer IDs before calling get_customer or log_activity. ' +
           'Call list_pipeline for an overview before working with specific deals. ' +
           'Always include the customer ID when creating deals or logging activities.',
       },
     );
-  }
 
-  /** Registers all MCP primitives once NestJS DI is fully resolved. */
-  onModuleInit() {
-    this.registerTools();
-    this.registerResources();
-    this.registerPrompts();
-    this.logger.log('CRM MCP facade tools, resources, and prompts registered');
+    this.registerTools(server);
+    this.registerResources(server);
+    this.registerPrompts(server);
+
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    this.logger.log('CRM MCP facade connected via HTTP transport (per-request)');
+    return { server, transport };
   }
 
   // ─── Tools ────────────────────────────────────────────────────────────────
@@ -68,10 +70,10 @@ export class CrmMcpService implements OnModuleInit {
   // All read tools carry `readOnlyHint: true` so Claude Desktop can auto-approve
   // them. Write tools omit it (default: false) to keep the confirmation prompt.
 
-  private registerTools() {
+  private registerTools(server: McpServer) {
     // ── search_customers ─────────────────────────────────────────────────────
     // Entry point for most CRM workflows — returns IDs needed by other tools.
-    this.server.registerTool(
+    server.registerTool(
       'search_customers',
       {
         title: 'Search Customers',
@@ -122,7 +124,7 @@ export class CrmMcpService implements OnModuleInit {
     // ── get_customer ──────────────────────────────────────────────────────────
     // Returns the full profile — customer + deals + activity summary in one call
     // so Claude doesn't have to make three separate tool calls.
-    this.server.registerTool(
+    server.registerTool(
       'get_customer',
       {
         title: 'Get Customer Profile',
@@ -169,7 +171,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // ── create_customer ───────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'create_customer',
       {
         title: 'Create Customer',
@@ -211,7 +213,7 @@ export class CrmMcpService implements OnModuleInit {
     // ── list_pipeline ─────────────────────────────────────────────────────────
     // Returns deal IDs + the full stage breakdown — the canonical starting point
     // before working with any specific deal.
-    this.server.registerTool(
+    server.registerTool(
       'list_pipeline',
       {
         title: 'List Pipeline',
@@ -254,7 +256,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // ── create_deal ───────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'create_deal',
       {
         title: 'Create Deal',
@@ -309,7 +311,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // ── move_deal_stage ───────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'move_deal_stage',
       {
         title: 'Move Deal Stage',
@@ -352,7 +354,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // ── log_activity ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'log_activity',
       {
         title: 'Log Activity',
@@ -405,7 +407,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // ── get_activity_summary ──────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'get_activity_summary',
       {
         title: 'Get Activity Summary',
@@ -450,9 +452,9 @@ export class CrmMcpService implements OnModuleInit {
 
   // ─── Resources ────────────────────────────────────────────────────────────
 
-  private registerResources() {
+  private registerResources(server: McpServer) {
     // Pipeline snapshot — host can pull this into context before a pipeline review
-    this.server.registerResource(
+    server.registerResource(
       'pipeline',
       'crm://pipeline',
       {
@@ -480,7 +482,7 @@ export class CrmMcpService implements OnModuleInit {
 
     // Per-customer profile template — `list` callback enumerates all customers
     // so the host can show a picker with all available customer URIs.
-    this.server.registerResource(
+    server.registerResource(
       'customer-profile',
       new ResourceTemplate('crm://customers/{id}', {
         list: async () => {
@@ -519,9 +521,9 @@ export class CrmMcpService implements OnModuleInit {
 
   // ─── Prompts ──────────────────────────────────────────────────────────────
 
-  private registerPrompts() {
+  private registerPrompts(server: McpServer) {
     // customer_brief — pre-call preparation, enriches context with live CRM data
-    this.server.registerPrompt(
+    server.registerPrompt(
       'customer_brief',
       {
         title: 'Customer Brief',
@@ -570,7 +572,7 @@ export class CrmMcpService implements OnModuleInit {
     );
 
     // pipeline_review — weekly team review, optionally scoped to a rep or stage
-    this.server.registerPrompt(
+    server.registerPrompt(
       'pipeline_review',
       {
         title: 'Pipeline Review',
@@ -610,20 +612,5 @@ export class CrmMcpService implements OnModuleInit {
         };
       },
     );
-  }
-
-  // ─── Transport ────────────────────────────────────────────────────────────
-
-  /**
-   * Connects the MCP server to a stateless HTTP transport and returns it.
-   * The caller mounts the transport on a `node:http` server to handle
-   * incoming JSON-RPC requests at the `/mcp` endpoint.
-   */
-  // sessionIdGenerator: undefined → stateless (no per-session state, safe for horizontal scaling)
-  async start(): Promise<StreamableHTTPServerTransport> {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await this.server.connect(transport);
-    this.logger.log('CRM MCP facade connected via HTTP transport');
-    return transport;
   }
 }

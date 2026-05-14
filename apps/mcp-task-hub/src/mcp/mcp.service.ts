@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -7,52 +7,53 @@ import { TasksService } from '../tasks/tasks.service.js';
 /**
  * Core MCP service for the Task Hub server.
  *
- * This class is the bridge between NestJS (dependency injection, lifecycle
- * hooks) and the MCP SDK (`McpServer`). It:
+ * Uses the stateless per-request pattern required by MCP SDK ≥ 1.13:
+ * `StreamableHTTPServerTransport` with `sessionIdGenerator: undefined` cannot
+ * be reused across requests, so `createTransport()` creates a fresh
+ * McpServer + transport pair for each incoming POST, connects them, and
+ * returns the transport for `main.ts` to call `handleRequest` on.
  *
- *   1. Creates and configures the `McpServer` instance in the constructor,
- *      including the `instructions` string that is injected directly into
- *      Claude's system prompt for every conversation.
- *   2. Registers all tools, resources, and prompts in `onModuleInit` — called
- *      automatically by NestJS after all providers are instantiated, so
- *      `TasksService` is guaranteed to be ready.
- *   3. Exposes `start()`, which connects an HTTP transport and returns it so
- *      `main.ts` can mount it on a `node:http` server.
- *
- * Tool handlers call `this.tasks.*` methods directly — there is no HTTP hop.
+ * The `TasksService` singleton is shared across all per-request servers —
+ * only the MCP protocol layer is recreated per request.
  */
 @Injectable()
-export class McpService implements OnModuleInit {
+export class McpService {
   private readonly logger = new Logger(McpService.name);
-  private readonly server: McpServer;
 
-  constructor(private readonly tasks: TasksService) {
-    this.server = new McpServer(
+  constructor(private readonly tasks: TasksService) {}
+
+  // ─── Transport ────────────────────────────────────────────────────────────
+
+  /**
+   * Creates a fresh McpServer + transport for a single stateless HTTP request.
+   * Call `transport.handleRequest(req, res, body)` after this, then close both
+   * on `res.on('close')`.
+   */
+  async createTransport(): Promise<{ server: McpServer; transport: StreamableHTTPServerTransport }> {
+    const server = new McpServer(
       { name: 'task-hub', version: '1.0.0' },
       {
-        // `instructions` lands verbatim in Claude's system prompt for every
-        // session. Use it for cross-tool hints that don't fit naturally in any
-        // single tool description.
         instructions:
           'Call list_tasks or get_task before update_task or delete_task — task IDs are not guessable. ' +
           'When creating tasks, check existing ones first to avoid duplicates. ' +
           'Use daily_standup prompt for a formatted standup report.',
       },
     );
-  }
 
-  /** Registers all MCP primitives once NestJS DI is fully resolved. */
-  onModuleInit() {
-    this.registerTools();
-    this.registerResources();
-    this.registerPrompts();
-    this.logger.log('MCP tools, resources, and prompts registered');
+    this.registerTools(server);
+    this.registerResources(server);
+    this.registerPrompts(server);
+
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    this.logger.log('MCP server connected via HTTP transport (per-request)');
+    return { server, transport };
   }
 
   // ─── Tools ────────────────────────────────────────────────────────────────
   //
   // Each tool follows the same pattern:
-  //   registerTool(name, { title, description, inputSchema, annotations }, handler)
+  //   server.registerTool(name, { title, description, inputSchema, annotations }, handler)
   //
   // `description`  — read by Claude to decide whether to call the tool.
   //                  Say what it does, what it returns, and what it does NOT do.
@@ -60,9 +61,9 @@ export class McpService implements OnModuleInit {
   //                  Schema `description` Claude sees when filling in arguments.
   // `annotations`  — hints for the host UI (readOnlyHint, destructiveHint, …).
 
-  private registerTools() {
+  private registerTools(server: McpServer) {
     // ── list_tasks ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'list_tasks',
       {
         title: 'List Tasks',
@@ -119,7 +120,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── get_task ─────────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'get_task',
       {
         title: 'Get Task',
@@ -149,7 +150,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── create_task ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'create_task',
       {
         title: 'Create Task',
@@ -194,7 +195,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── update_task ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'update_task',
       {
         title: 'Update Task',
@@ -236,7 +237,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── delete_task ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'delete_task',
       {
         title: 'Delete Task',
@@ -266,7 +267,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── add_comment ──────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'add_comment',
       {
         title: 'Add Comment',
@@ -298,7 +299,7 @@ export class McpService implements OnModuleInit {
     );
 
     // ── get_stats ─────────────────────────────────────────────────────────────
-    this.server.registerTool(
+    server.registerTool(
       'get_stats',
       {
         title: 'Get Task Statistics',
@@ -323,9 +324,9 @@ export class McpService implements OnModuleInit {
   // `ResourceTemplate` with an RFC 6570 URI template and an optional `list`
   // callback that enumerates available instances.
 
-  private registerResources() {
+  private registerResources(server: McpServer) {
     // All tasks — full snapshot including stats
-    this.server.registerResource(
+    server.registerResource(
       'all-tasks',
       'tasks://all',
       {
@@ -352,7 +353,7 @@ export class McpService implements OnModuleInit {
     );
 
     // Overdue tasks — useful to include in standup context
-    this.server.registerResource(
+    server.registerResource(
       'overdue-tasks',
       'tasks://overdue',
       {
@@ -375,7 +376,7 @@ export class McpService implements OnModuleInit {
 
     // Per-project tasks — a URI template that generates one resource per project.
     // The `list` callback lets the host enumerate all known project URIs.
-    this.server.registerResource(
+    server.registerResource(
       'project-tasks',
       new ResourceTemplate('tasks://project/{name}', {
         list: async () => {
@@ -419,9 +420,9 @@ export class McpService implements OnModuleInit {
   // any data changes. Arguments are always strings (MCP spec constraint);
   // numeric conversion happens inside the handler if needed.
 
-  private registerPrompts() {
+  private registerPrompts(server: McpServer) {
     // Daily standup — pulls live task data into a structured prompt
-    this.server.registerPrompt(
+    server.registerPrompt(
       'daily_standup',
       {
         title: 'Daily Standup',
@@ -461,7 +462,7 @@ export class McpService implements OnModuleInit {
     );
 
     // Sprint review — scoped to a project, optionally evaluated against a goal
-    this.server.registerPrompt(
+    server.registerPrompt(
       'sprint_review',
       {
         title: 'Sprint Review',
@@ -498,20 +499,5 @@ export class McpService implements OnModuleInit {
         };
       },
     );
-  }
-
-  // ─── Transport ────────────────────────────────────────────────────────────
-
-  /**
-   * Connects the MCP server to a stateless HTTP transport and returns it.
-   * The caller mounts the transport on a `node:http` server to handle
-   * incoming JSON-RPC requests at the `/mcp` endpoint.
-   */
-  async start(): Promise<StreamableHTTPServerTransport> {
-    // sessionIdGenerator: undefined → stateless (no per-session state, safe for horizontal scaling)
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await this.server.connect(transport);
-    this.logger.log('MCP server connected via HTTP transport');
-    return transport;
   }
 }
