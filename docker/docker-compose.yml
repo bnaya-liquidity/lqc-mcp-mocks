@@ -1,5 +1,7 @@
+name: Mocked-MCP
 services:
   task-hub:
+    container_name: mock-task-hub-mcp
     build:
       context: ..
       dockerfile: docker/task-hub.Dockerfile
@@ -7,6 +9,7 @@ services:
       - "3010:3010"
 
   crm-rest:
+    container_name: mock-crm-rest
     build:
       context: ..
       dockerfile: docker/crm-rest.Dockerfile
@@ -14,6 +17,7 @@ services:
       - "3011:3011"
 
   crm-mcp:
+    container_name: mock-crm-mcp
     build:
       context: ..
       dockerfile: docker/crm-mcp.Dockerfile

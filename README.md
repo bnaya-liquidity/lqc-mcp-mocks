@@ -2,10 +2,10 @@
 
 NestJS monorepo with two MCP server demos. Each app shows a different integration pattern.
 
-| App | Pattern | Port |
-|-----|---------|------|
-| `apps/mcp-task-hub` | Pure MCP server — tools, resources, and prompts with no underlying REST API | HTTP :3010 |
-| `apps/api-crm` | NestJS REST API + MCP facade — existing HTTP API exposed via MCP protocol | REST :3011 + MCP :3012 |
+| App                 | Pattern                                                                     | Port                   |
+| ------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| `apps/mcp-task-hub` | Pure MCP server — tools, resources, and prompts with no underlying REST API | HTTP :3010             |
+| `apps/api-crm`      | NestJS REST API + MCP facade — existing HTTP API exposed via MCP protocol   | REST :3011 + MCP :3012 |
 
 All data is in-memory mock data. No database required.
 
@@ -68,30 +68,30 @@ A task management MCP server demonstrating all three MCP primitives.
 
 **Tools**
 
-| Tool | Description | Annotations |
-|------|-------------|-------------|
-| `list_tasks` | List tasks with optional status / project / priority / assignee / tag filters | `readOnlyHint` |
-| `get_task` | Fetch a single task by ID including full comment history | `readOnlyHint` |
-| `create_task` | Create a new task | — |
-| `update_task` | Update any field on an existing task | `idempotentHint` |
-| `delete_task` | Permanently delete a task and its comments | `destructiveHint` |
-| `add_comment` | Append a comment to a task | — |
-| `get_stats` | Summary counts by status, overdue count, project list | `readOnlyHint` |
+| Tool          | Description                                                                   | Annotations       |
+| ------------- | ----------------------------------------------------------------------------- | ----------------- |
+| `list_tasks`  | List tasks with optional status / project / priority / assignee / tag filters | `readOnlyHint`    |
+| `get_task`    | Fetch a single task by ID including full comment history                      | `readOnlyHint`    |
+| `create_task` | Create a new task                                                             | —                 |
+| `update_task` | Update any field on an existing task                                          | `idempotentHint`  |
+| `delete_task` | Permanently delete a task and its comments                                    | `destructiveHint` |
+| `add_comment` | Append a comment to a task                                                    | —                 |
+| `get_stats`   | Summary counts by status, overdue count, project list                         | `readOnlyHint`    |
 
 **Resources**
 
-| URI | Description |
-|-----|-------------|
-| `tasks://all` | All tasks across every project |
-| `tasks://overdue` | Tasks past due date that are not done/cancelled |
+| URI                      | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `tasks://all`            | All tasks across every project                  |
+| `tasks://overdue`        | Tasks past due date that are not done/cancelled |
 | `tasks://project/{name}` | Tasks filtered to one project (supports `list`) |
 
 **Prompts**
 
-| Name | Description |
-|------|-------------|
+| Name            | Description                                                                        |
+| --------------- | ---------------------------------------------------------------------------------- |
 | `daily_standup` | Structured standup report (yesterday / today / blockers). Optional `assignee` arg. |
-| `sprint_review` | Sprint retrospective for a project. `project` + optional `sprintGoal` args. |
+| `sprint_review` | Sprint retrospective for a project. `project` + optional `sprintGoal` args.        |
 
 ---
 
@@ -129,29 +129,29 @@ The MCP facade wraps the same `CustomersService`, `DealsService`, and `Activitie
 
 **Tools**
 
-| Tool | Description | Annotations |
-|------|-------------|-------------|
-| `search_customers` | Search by name, email, company, or industry | `readOnlyHint` |
-| `get_customer` | Full profile: customer + all deals + activity summary | `readOnlyHint` |
-| `create_customer` | Create a new customer record | — |
-| `list_pipeline` | All deals grouped by stage, with weighted pipeline value | `readOnlyHint` |
-| `create_deal` | Create a deal linked to a customer | — |
-| `move_deal_stage` | Advance or revert a deal's pipeline stage | `idempotentHint` |
-| `log_activity` | Log a call / email / meeting / demo / note | — |
-| `get_activity_summary` | Recent activity history for a customer | `readOnlyHint` |
+| Tool                   | Description                                              | Annotations      |
+| ---------------------- | -------------------------------------------------------- | ---------------- |
+| `search_customers`     | Search by name, email, company, or industry              | `readOnlyHint`   |
+| `get_customer`         | Full profile: customer + all deals + activity summary    | `readOnlyHint`   |
+| `create_customer`      | Create a new customer record                             | —                |
+| `list_pipeline`        | All deals grouped by stage, with weighted pipeline value | `readOnlyHint`   |
+| `create_deal`          | Create a deal linked to a customer                       | —                |
+| `move_deal_stage`      | Advance or revert a deal's pipeline stage                | `idempotentHint` |
+| `log_activity`         | Log a call / email / meeting / demo / note               | —                |
+| `get_activity_summary` | Recent activity history for a customer                   | `readOnlyHint`   |
 
 **Resources**
 
-| URI | Description |
-|-----|-------------|
-| `crm://pipeline` | Full pipeline snapshot grouped by stage |
+| URI                    | Description                                     |
+| ---------------------- | ----------------------------------------------- |
+| `crm://pipeline`       | Full pipeline snapshot grouped by stage         |
 | `crm://customers/{id}` | Customer record with deals and activity summary |
 
 **Prompts**
 
-| Name | Description |
-|------|-------------|
-| `customer_brief` | Pre-call briefing doc. `customerId` + optional `meetingPurpose`. |
+| Name              | Description                                                         |
+| ----------------- | ------------------------------------------------------------------- |
+| `customer_brief`  | Pre-call briefing doc. `customerId` + optional `meetingPurpose`.    |
 | `pipeline_review` | Weekly pipeline health report. Optional `ownerId` and `focusStage`. |
 
 ---
@@ -174,14 +174,7 @@ docker compose -f docker/docker-compose.yml logs -f
 docker compose -f docker/docker-compose.yml down
 ```
 
-The same ports are mapped to the host (3010 / 3011 / 3012). Register with Claude Code once the containers are up (run once):
-
-```bash
-claude mcp add --transport http --scope user lqc-mock-task-hub http://localhost:3010/mcp
-claude mcp add --transport http --scope user lqc-mock-crm http://localhost:3012/mcp
-```
-
-In-memory data resets on each container restart.
+The same ports are mapped to the host (3010 / 3011 / 3012). Register with Claude Code once the containers are up (run once)
 
 ---
 
