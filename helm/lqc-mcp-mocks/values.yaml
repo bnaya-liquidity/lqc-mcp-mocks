@@ -1,0 +1,27 @@
+image:
+  taskHub: ghcr.io/liquidity/lqc-mock-task-hub:latest
+  apiCrm:  ghcr.io/liquidity/lqc-mock-api-crm:latest
+  pullPolicy: IfNotPresent
+
+taskHub:
+  replicas: 1
+  port: 3010
+  resources:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits:   { cpu: "200m", memory: "128Mi" }
+
+crmRest:
+  replicas: 1
+  port: 3011
+  command: ["node", "apps/api-crm/dist/main.js"]
+  resources:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits:   { cpu: "200m", memory: "128Mi" }
+
+crmMcp:
+  replicas: 1
+  port: 3012
+  command: ["node", "apps/api-crm/dist/main-mcp.js"]
+  resources:
+    requests: { cpu: "50m", memory: "64Mi" }
+    limits:   { cpu: "200m", memory: "128Mi" }
