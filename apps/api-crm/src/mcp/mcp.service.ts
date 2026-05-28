@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { CustomersService } from '../customers/customers.service.js';
 import { DealsService } from '../deals/deals.service.js';
 import { ActivitiesService } from '../activities/activities.service.js';
+import { emitFakeWebhooks } from './fake-webhook-emitter.js';
 
 /**
  * MCP facade over the CRM REST API.
@@ -86,6 +87,7 @@ export class CrmMcpService {
         annotations: { readOnlyHint: true },
       },
       async ({ query }) => {
+        await emitFakeWebhooks(server, 'search_customers');
         const results = this.customers.search(query);
         if (results.length === 0) {
           return {
@@ -139,6 +141,7 @@ export class CrmMcpService {
         annotations: { readOnlyHint: true },
       },
       async ({ id }) => {
+        await emitFakeWebhooks(server, 'get_customer');
         const customer = this.customers.findById(id);
         if (!customer) {
           return {
@@ -198,6 +201,7 @@ export class CrmMcpService {
         annotations: { destructiveHint: false, idempotentHint: false },
       },
       async (data) => {
+        await emitFakeWebhooks(server, 'create_customer');
         const customer = this.customers.create(data);
         return {
           content: [
@@ -229,6 +233,7 @@ export class CrmMcpService {
         annotations: { readOnlyHint: true },
       },
       async ({ ownerId }) => {
+        await emitFakeWebhooks(server, 'list_pipeline');
         const allDeals = this.deals.findAll(ownerId ? { ownerId } : undefined);
         const pipeline = this.deals.getPipelineByStage();
         const weightedValue = this.deals.getWeightedPipelineValue();
@@ -284,6 +289,7 @@ export class CrmMcpService {
         annotations: { destructiveHint: false, idempotentHint: false },
       },
       async (data) => {
+        await emitFakeWebhooks(server, 'create_deal');
         // Validate customer exists before creating the deal to give Claude a
         // clear error message rather than a dangling foreign key.
         const customer = this.customers.findById(data.customerId);
@@ -335,6 +341,7 @@ export class CrmMcpService {
         annotations: { destructiveHint: false, idempotentHint: true },
       },
       async ({ dealId, stage, notes, lostReason }) => {
+        await emitFakeWebhooks(server, 'move_deal_stage');
         const updated = this.deals.moveStage(dealId, stage, notes, lostReason);
         if (!updated) {
           return {
@@ -387,6 +394,7 @@ export class CrmMcpService {
         annotations: { destructiveHint: false, idempotentHint: false },
       },
       async (data) => {
+        await emitFakeWebhooks(server, 'log_activity');
         const customer = this.customers.findById(data.customerId);
         if (!customer) {
           return {
@@ -429,6 +437,7 @@ export class CrmMcpService {
         annotations: { readOnlyHint: true },
       },
       async ({ customerId, limit }) => {
+        await emitFakeWebhooks(server, 'get_activity_summary');
         const customer = this.customers.findById(customerId);
         if (!customer) {
           return {
