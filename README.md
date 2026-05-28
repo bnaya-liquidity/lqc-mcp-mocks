@@ -40,6 +40,21 @@ lqc-mcp-mocks/
 
 ## Quick start
 
+**How it works:**
+
+```
+┌──────────────┐  MCP/HTTP  ┌─────────────────────────────────┐
+│  Claude Code │ ─────────▶ │  localhost:3010  (task-hub MCP) │
+│              │ ─────────▶ │  localhost:3012  (crm MCP)      │
+└──────────────┘            └────────────────┬────────────────┘
+                                             │ direct service calls (in-process)
+                             ┌───────────────▼─────────────────┐
+                             │  localhost:3011  (crm REST)      │
+                             │  — developer tool only,          │
+                             │    not registered with Claude    │
+                             └─────────────────────────────────┘
+```
+
 ```bash
 # Install all dependencies
 pnpm install
@@ -158,6 +173,22 @@ The MCP facade wraps the same `CustomersService`, `DealsService`, and `Activitie
 
 ## Docker
 
+**How it works:**
+
+```
+┌──────────────┐  MCP/HTTP  ┌─────────────────────────────────┐
+│  Claude Code │ ─────────▶ │  localhost:3010  (task-hub MCP) │
+│  (host)      │ ─────────▶ │  localhost:3012  (crm MCP)      │
+└──────────────┘            └────────────────┬────────────────┘
+                               port-mapped        │ container network
+                               to host            │ direct service calls
+                             ┌───────────────▼─────────────────┐
+                             │  localhost:3011  (crm REST)      │
+                             │  — developer tool only,          │
+                             │    not registered with Claude    │
+                             └─────────────────────────────────┘
+```
+
 Requires Docker with the Compose plugin. No local Node.js or pnpm needed — TypeScript is compiled inside the build.
 
 ```bash
@@ -219,6 +250,25 @@ claude mcp list
 
 ## Phase 3 — Kubernetes via Helm
 
+**How it works:**
+
+```
+┌──────────────┐  kubectl port-forward  ┌──────────────────────────────────────┐
+│  Claude Code │ ──────────────────────▶│  localhost:3010  →  task-hub-svc     │
+│  (local)     │ ──────────────────────▶│  localhost:3012  →  crm-mcp-svc      │
+└──────────────┘                        └──────────────────────┬───────────────┘
+                                                               │ ClusterIP (in-cluster)
+                                         ┌─────────────────────▼───────────────┐
+                                         │  crm-rest-svc:3011                   │
+                                         │  — developer tool only,              │
+                                         │    not registered with Claude        │
+                                         └─────────────────────────────────────┘
+```
+
+Other in-cluster services can reach the MCP servers directly without port-forwarding:
+- `http://lqc-mcp-mocks-task-hub-svc:3010/mcp`
+- `http://lqc-mcp-mocks-crm-mcp-svc:3012/mcp`
+
 ### Install
 
 ```bash
@@ -232,12 +282,6 @@ kubectl port-forward svc/lqc-mcp-mocks-task-hub-svc 3010:3010 &
 kubectl port-forward svc/lqc-mcp-mocks-crm-mcp-svc 3012:3012 &
 # claude mcp add commands are unchanged — still localhost:PORT
 ```
-
-### In-cluster access
-
-Other pods reach the MCP servers at:
-- `http://lqc-mcp-mocks-task-hub-svc:3010/mcp`
-- `http://lqc-mcp-mocks-crm-mcp-svc:3012/mcp`
 
 ### Common overrides
 
