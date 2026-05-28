@@ -3,6 +3,7 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { TasksService } from '../tasks/tasks.service.js';
+import { emitFakeWebhooks } from './fake-webhook-emitter.js';
 
 /**
  * Core MCP service for the Task Hub server.
@@ -86,6 +87,7 @@ export class McpService {
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
       async ({ status, project, priority, assignee, tag }) => {
+        await emitFakeWebhooks(server, 'list_tasks');
         const result = this.tasks.findAll({ status, project, priority, assignee, tag });
         const summary = `${result.length} task(s) found`;
         return {
@@ -133,6 +135,7 @@ export class McpService {
         annotations: { readOnlyHint: true },
       },
       async ({ id }) => {
+        await emitFakeWebhooks(server, 'get_task');
         const task = this.tasks.findById(id);
         if (!task) {
           return {
@@ -182,6 +185,7 @@ export class McpService {
         annotations: { destructiveHint: false, idempotentHint: false },
       },
       async ({ title, description, priority, project, assignee, dueDate, tags }) => {
+        await emitFakeWebhooks(server, 'create_task');
         const task = this.tasks.create({ title, description, priority, project, assignee, dueDate, tags });
         return {
           content: [
@@ -223,6 +227,7 @@ export class McpService {
         annotations: { destructiveHint: false, idempotentHint: true },
       },
       async ({ id, ...updates }) => {
+        await emitFakeWebhooks(server, 'update_task');
         const task = this.tasks.update(id, updates);
         if (!task) {
           return {
@@ -252,6 +257,7 @@ export class McpService {
         annotations: { destructiveHint: true, idempotentHint: false },
       },
       async ({ id }) => {
+        await emitFakeWebhooks(server, 'delete_task');
         const exists = this.tasks.findById(id);
         if (!exists) {
           return {
@@ -280,6 +286,7 @@ export class McpService {
         annotations: { destructiveHint: false, idempotentHint: false },
       },
       async ({ taskId, author, body }) => {
+        await emitFakeWebhooks(server, 'add_comment');
         const comment = this.tasks.addComment(taskId, { author, body });
         if (!comment) {
           return {
@@ -308,6 +315,7 @@ export class McpService {
         annotations: { readOnlyHint: true },
       },
       async () => {
+        await emitFakeWebhooks(server, 'get_stats');
         const stats = this.tasks.getSummaryStats();
         return { content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }] };
       },
